@@ -13,7 +13,7 @@ private:
     using CNF = std::vector<Clause>;
     using Model = std::unordered_map<int, bool>;
 
-    bool dpll(CNF& clauses, std::vector<int>& symbols, Model& model);
+    bool dpll(CNF clauses, std::vector<int> symbols, Model model);
     bool isClauseTrue(const Clause& clause, const Model& model);
     bool isClauseFalse(const Clause& clause, const Model& model);
     std::pair<int, bool> findPureSymbol(const std::vector<int>& symbols, const CNF& clauses, const Model& model);

@@ -12,21 +12,30 @@ void DPLLSolver::parseDIMACS(const std::string& filename, CNF& clauses, std::vec
     std::unordered_set<int> symbol_set;
 
     while (std::getline(in, line)) {
-        if (line.empty() || line[0] == 'c') continue;
-        if (line[0] == 'p') continue;
+        if (line.empty() || line[0] == 'c' || line[0] == 'p' || line[0] == '%') continue;
 
         std::istringstream iss(line);
         int lit;
         Clause clause;
         while (iss >> lit) {
             if (lit == 0) break;
+
+            // Seguridad extra: ignora cualquier valor fuera del rango DIMACS válido
+            if (std::abs(lit) > 1e6) continue;
+
             clause.push_back(lit);
             symbol_set.insert(std::abs(lit));
         }
-        clauses.push_back(clause);
+
+        // Solo agregamos la cláusula si tiene al menos un literal
+        if (!clause.empty()) {
+            clauses.push_back(clause);
+        }
     }
 
+    // Convertimos el conjunto de símbolos a un vector ordenado
     symbols.assign(symbol_set.begin(), symbol_set.end());
+    std::sort(symbols.begin(), symbols.end());
 }
 
 bool DPLLSolver::solve(const std::string& filename) {
@@ -47,7 +56,7 @@ bool DPLLSolver::solve(const std::string& filename) {
     return result;
 }
 
-CNF DPLLSolver::simplifyClauses(const CNF& clauses, const Model& model) {
+DPLLSolver::CNF DPLLSolver::simplifyClauses(const DPLLSolver::CNF& clauses, const Model& model) {
     CNF simplified;
     for (const auto& clause : clauses) {
         Clause new_clause;
@@ -58,28 +67,28 @@ CNF DPLLSolver::simplifyClauses(const CNF& clauses, const Model& model) {
             if (it != model.end()) {
                 if ((lit > 0 && it->second) || (lit < 0 && !it->second)) {
                     clause_satisfied = true;
-                    break;
-                } else {
-                    continue; // Literal es falso
+                    break; 
                 }
+            } else {
+                new_clause.push_back(lit);
             }
-            new_clause.push_back(lit); // Literal sin asignar
         }
         if (!clause_satisfied) {
+            if (new_clause.empty()) {
+                return {{}};
+            }
             simplified.push_back(new_clause);
         }
     }
     return simplified;
 }
 
-bool DPLLSolver::dpll(CNF& clauses, std::vector<int>& symbols, Model& model) {
+
+bool DPLLSolver::dpll(CNF clauses, std::vector<int> symbols, Model model) {
     CNF simplified = simplifyClauses(clauses, model);
 
     if (simplified.empty()) return true;
-
-    for (const auto& clause : simplified) {
-        if (clause.empty()) return false;
-    }
+    if (simplified.size() == 1 && simplified[0].empty()) return false;
 
     std::vector<int> remaining_symbols;
     std::copy_if(symbols.begin(), symbols.end(), std::back_inserter(remaining_symbols),
@@ -87,29 +96,28 @@ bool DPLLSolver::dpll(CNF& clauses, std::vector<int>& symbols, Model& model) {
 
     auto [pure_sym, pure_val] = findPureSymbol(remaining_symbols, simplified, model);
     if (pure_sym != 0) {
-        Model new_model = model;
-        new_model[pure_sym] = pure_val;
-        return dpll(clauses, symbols, new_model);
+        model[pure_sym] = pure_val;
+        return dpll(clauses, symbols, model); // Usa las cláusulas originales y nuevo modelo
     }
 
     auto [unit_sym, unit_val] = findUnitClause(simplified, model);
     if (unit_sym != 0) {
-        Model new_model = model;
-        new_model[unit_sym] = unit_val;
-        return dpll(clauses, symbols, new_model);
+        model[unit_sym] = unit_val;
+        return dpll(clauses, symbols, model);
     }
+
+    if (remaining_symbols.empty()) return false;
 
     int P = remaining_symbols.front();
 
-    Model model_true = model;
-    model_true[P] = true;
-    if (dpll(clauses, symbols, model_true)) return true;
+    model[P] = true;
+    if (dpll(clauses, symbols, model)) return true;
 
-    Model model_false = model;
-    model_false[P] = false;
-    return dpll(clauses, symbols, model_false);
+    model[P] = false;
+    if (dpll(clauses, symbols, model)) return true;
+
+    return false;
 }
-
 
 bool DPLLSolver::isClauseTrue(const Clause& clause, const Model& model) {
     for (int lit : clause) {
