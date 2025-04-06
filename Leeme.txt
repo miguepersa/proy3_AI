@@ -1,0 +1,16 @@
+# SAT Solver & Sudoku solver
+
+## Compilacion
+Para compilar los programas solo es necesario ejecutar el comando make
+```
+$ make
+```
+
+## Ejecucion
+
+```
+$ ./dpllSolver <archivo-cnf>
+```
+```
+$ ./sudokuSolver [instancia]
+```
