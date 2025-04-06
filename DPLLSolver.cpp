@@ -20,20 +20,20 @@ void DPLLSolver::parseDIMACS(const std::string& filename, CNF& clauses, std::vec
         while (iss >> lit) {
             if (lit == 0) break;
 
-            // Seguridad extra: ignora cualquier valor fuera del rango DIMACS válido
+            
             if (std::abs(lit) > 1e6) continue;
 
             clause.push_back(lit);
             symbol_set.insert(std::abs(lit));
         }
 
-        // Solo agregamos la cláusula si tiene al menos un literal
+        
         if (!clause.empty()) {
             clauses.push_back(clause);
         }
     }
 
-    // Convertimos el conjunto de símbolos a un vector ordenado
+    
     symbols.assign(symbol_set.begin(), symbol_set.end());
     std::sort(symbols.begin(), symbols.end());
 }
@@ -43,15 +43,14 @@ bool DPLLSolver::solve(const std::string& filename) {
     std::vector<int> symbols;
     parseDIMACS(filename, clauses, symbols);
     std::sort(symbols.begin(), symbols.end());
-    Model model;
+    lastModel.clear();  
 
     auto start = std::chrono::high_resolution_clock::now();
-    bool result = dpll(clauses, symbols, model);
+    bool result = dpll(clauses, symbols, {});
     auto end = std::chrono::high_resolution_clock::now();
 
     std::cout << (result ? "SATISFIABLE" : "UNSATISFIABLE") << "\n";
-    std::chrono::duration<double> duration = end - start;
-    std::cout << duration.count() << "\n";
+    std::cout << "Time: " << std::chrono::duration<double>(end - start).count() << " seconds\n";
 
     return result;
 }
@@ -83,39 +82,64 @@ DPLLSolver::CNF DPLLSolver::simplifyClauses(const DPLLSolver::CNF& clauses, cons
     return simplified;
 }
 
-
 bool DPLLSolver::dpll(CNF clauses, std::vector<int> symbols, Model model) {
     CNF simplified = simplifyClauses(clauses, model);
 
-    if (simplified.empty()) return true;
-    if (simplified.size() == 1 && simplified[0].empty()) return false;
+    if (simplified.empty()) {
+        lastModel = model;  
+        return true;
+    }
+    if (simplified.size() == 1 && simplified[0].empty()) {
+        return false;
+    }
 
     std::vector<int> remaining_symbols;
     std::copy_if(symbols.begin(), symbols.end(), std::back_inserter(remaining_symbols),
-                 [&model](int s) { return model.find(s) == model.end(); });
+                [&model](int s) { return model.find(s) == model.end(); });
 
+    
     auto [pure_sym, pure_val] = findPureSymbol(remaining_symbols, simplified, model);
     if (pure_sym != 0) {
-        model[pure_sym] = pure_val;
-        return dpll(clauses, symbols, model); // Usa las cláusulas originales y nuevo modelo
+        Model new_model = model;  
+        new_model[pure_sym] = pure_val;
+        if (dpll(clauses, symbols, new_model)) {
+            return true;
+        }
+        return false;
     }
 
+    
     auto [unit_sym, unit_val] = findUnitClause(simplified, model);
     if (unit_sym != 0) {
-        model[unit_sym] = unit_val;
-        return dpll(clauses, symbols, model);
+        Model new_model = model;  
+        new_model[unit_sym] = unit_val;
+        if (dpll(clauses, symbols, new_model)) {
+            return true;
+        }
+        return false;
     }
 
-    if (remaining_symbols.empty()) return false;
+    if (remaining_symbols.empty()) {
+        return false;
+    }
 
+    
     int P = remaining_symbols.front();
-
-    model[P] = true;
-    if (dpll(clauses, symbols, model)) return true;
-
-    model[P] = false;
-    if (dpll(clauses, symbols, model)) return true;
-
+    
+    
+    Model model_true = model;
+    model_true[P] = true;
+    if (dpll(clauses, symbols, model_true)) {
+        return true;
+    }
+    
+    
+    Model model_false = model;
+    model_false[P] = false;
+    if (dpll(clauses, symbols, model_false)) {
+        return true;
+    }
+    
     return false;
 }
 

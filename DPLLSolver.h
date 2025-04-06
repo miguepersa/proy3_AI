@@ -8,6 +8,8 @@
 class DPLLSolver {
 public:
     bool solve(const std::string& filename);
+    const std::unordered_map<int, bool>& getModel() const { return lastModel; }
+    
 private:
     using Clause = std::vector<int>;
     using CNF = std::vector<Clause>;
@@ -20,6 +22,8 @@ private:
     std::pair<int, bool> findUnitClause(const CNF& clauses, const Model& model);
     void parseDIMACS(const std::string& filename, CNF& clauses, std::vector<int>& symbols);
     CNF simplifyClauses(const CNF&, const Model&);
+    
+    Model lastModel;
 };
 
 #endif
